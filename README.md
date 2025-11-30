@@ -1,3 +1,3 @@
 # playground2-go
 
-- [グレースフルシャットダウンの実装メモ](./internal/cmd/ex0001)
+- [HTTPサーバーのグレースフルシャットダウンの実装メモ](./internal/cmd/ex0001)
