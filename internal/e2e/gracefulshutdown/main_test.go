@@ -20,25 +20,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// HTTPサーバーのグレースフルシャットダウンが適切に実施されることを確認するテスト
+// テストコード中で、HTTPサーバーのソースコードのビルド〜ビルド後のバイナリファイルの起動〜グレースフルシャットダウンの実行
+// を通して適切にグレースフルシャットダウンできているか？を確認する
 func TestMain(m *testing.M) {
-	os.Exit(runTestMain(m, buildCommand{
-		Name: "make",
-		Args: []string{"ex0001.cmd"},
-	}))
-	os.Exit(runTestMain(m, buildCommand{
-		Name: "make",
-		Args: []string{"ex0002.cmd"},
-	}))
+	os.Exit(runTestMain(m))
 }
 
-type buildCommand struct {
-	Name string
-	Args []string
-}
+var testTargetBinNames = []string{"ex0001.cmd", "ex0002.cmd"}
 
 func runTestMain(
 	m *testing.M,
-	bc buildCommand,
 ) int {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -46,13 +38,16 @@ func runTestMain(
 		return 1
 	}
 
-	buildCmd := exec.Command(bc.Name, bc.Args...)
-	buildCmd.Stdout = os.Stdout
-	buildCmd.Stderr = os.Stderr
-	buildCmd.Dir = path.Join(wd, "..", "..", "..")
-	if err := runCommand(buildCmd); err != nil {
-		fmt.Printf("failed to build command: %v", err)
-		return 1
+	// GoのソースコードからHTTPサーバーをビルドする
+	for _, binName := range testTargetBinNames {
+		buildCmd := exec.Command("make", binName)
+		buildCmd.Stdout = os.Stdout
+		buildCmd.Stderr = os.Stderr
+		buildCmd.Dir = path.Join(wd, "..", "..", "..")
+		if err := runCommand(buildCmd); err != nil {
+			fmt.Printf("failed to build command: %v", err)
+			return 1
+		}
 	}
 
 	return m.Run()
@@ -82,8 +77,8 @@ func (t startServerParam) String() string {
 	return s
 }
 
-func startServer(p startServerParam) (*exec.Cmd, error) {
-	testTargetCmd := exec.Command("../../../ex0001.cmd")
+func startServer(binName string, p startServerParam) (*exec.Cmd, error) {
+	testTargetCmd := exec.Command(fmt.Sprintf("../../../%s", binName))
 	if p.stdout != nil {
 		testTargetCmd.Stdout = p.stdout
 	}
@@ -121,43 +116,45 @@ func TestGsIsOK_処理中のリクエストの完了を待ってからグレー�
 		{signalToSend: syscall.SIGINT},
 		{signalToSend: syscall.SIGTERM},
 	}
-	for _, c := range testCases {
-		t.Run(c.signalToSend.String(), func(t *testing.T) {
-			startServerParam := startServerParam{
-				stdout: bytes.NewBufferString(""),
-				stderr: bytes.NewBufferString(""),
-			}
-			testTargetCmd, err := startServer(startServerParam)
-			require.NoError(t, err)
+	for _, binName := range testTargetBinNames {
+		for _, c := range testCases {
+			t.Run(fmt.Sprintf("%s-%s", binName, c.signalToSend.String()), func(t *testing.T) {
+				startServerParam := startServerParam{
+					stdout: bytes.NewBufferString(""),
+					stderr: bytes.NewBufferString(""),
+				}
+				testTargetCmd, err := startServer(binName, startServerParam)
+				require.NoError(t, err)
 
-			wg := sync.WaitGroup{}
+				wg := sync.WaitGroup{}
 
-			wg.Go(func() {
-				time.Sleep(time.Second)
-				require.NoError(t, testTargetCmd.Process.Signal(c.signalToSend))
-			})
+				wg.Go(func() {
+					time.Sleep(time.Second)
+					require.NoError(t, testTargetCmd.Process.Signal(c.signalToSend))
+				})
 
-			wg.Go(func() {
-				res, err := http.DefaultClient.Get("http://localhost:8080/sleep3secs")
-				if !assert.NoError(t, err) {
+				wg.Go(func() {
+					res, err := http.DefaultClient.Get("http://localhost:8080/sleep3secs")
+					if !assert.NoError(t, err) {
+						return
+					}
+					assert.Equal(t, res.StatusCode, http.StatusOK)
+				})
+
+				var execerr *exec.ExitError
+				if err := testTargetCmd.Wait(); err != nil && !errors.As(err, &execerr) {
+					t.Errorf("failed to wait: %+v", err)
 					return
 				}
-				assert.Equal(t, res.StatusCode, http.StatusOK)
+
+				wg.Wait()
+
+				fmt.Println(startServerParam.String())
+
+				require.True(t, testTargetCmd.ProcessState.Exited())
+				assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 0)
 			})
-
-			var execerr *exec.ExitError
-			if err := testTargetCmd.Wait(); err != nil && !errors.As(err, &execerr) {
-				t.Errorf("failed to wait: %+v", err)
-				return
-			}
-
-			wg.Wait()
-
-			fmt.Println(startServerParam.String())
-
-			require.True(t, testTargetCmd.ProcessState.Exited())
-			assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 0)
-		})
+		}
 	}
 }
 
@@ -167,41 +164,43 @@ func TestGsIsOK_処理中のリクエストが完了しなかった場合は強�
 	}{
 		{signalToSend: syscall.SIGINT},
 	}
-	for _, c := range testCases {
-		t.Run(c.signalToSend.String(), func(t *testing.T) {
-			startServerParam := startServerParam{
-				stdout: bytes.NewBufferString(""),
-				stderr: bytes.NewBufferString(""),
-			}
-			testTargetCmd, err := startServer(startServerParam)
-			require.NoError(t, err)
+	for _, binName := range testTargetBinNames {
+		for _, c := range testCases {
+			t.Run(fmt.Sprintf("%s-%s", binName, c.signalToSend.String()), func(t *testing.T) {
+				startServerParam := startServerParam{
+					stdout: bytes.NewBufferString(""),
+					stderr: bytes.NewBufferString(""),
+				}
+				testTargetCmd, err := startServer(binName, startServerParam)
+				require.NoError(t, err)
 
-			wg := sync.WaitGroup{}
+				wg := sync.WaitGroup{}
 
-			wg.Go(func() {
-				time.Sleep(time.Second)
-				require.NoError(t, testTargetCmd.Process.Signal(c.signalToSend))
+				wg.Go(func() {
+					time.Sleep(time.Second)
+					require.NoError(t, testTargetCmd.Process.Signal(c.signalToSend))
+				})
+
+				wg.Go(func() {
+					_, err := http.DefaultClient.Get("http://localhost:8080/sleep30secs")
+					assert.Error(t, err)
+					assert.ErrorIs(t, err, io.EOF)
+				})
+
+				var execerr *exec.ExitError
+				if err := testTargetCmd.Wait(); err != nil && !errors.As(err, &execerr) {
+					t.Errorf("failed to wait: %+v", err)
+					return
+				}
+
+				wg.Wait()
+
+				fmt.Println(startServerParam.String())
+
+				require.True(t, testTargetCmd.ProcessState.Exited())
+				assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 2)
 			})
-
-			wg.Go(func() {
-				_, err := http.DefaultClient.Get("http://localhost:8080/sleep30secs")
-				assert.Error(t, err)
-				assert.ErrorIs(t, err, io.EOF)
-			})
-
-			var execerr *exec.ExitError
-			if err := testTargetCmd.Wait(); err != nil && !errors.As(err, &execerr) {
-				t.Errorf("failed to wait: %+v", err)
-				return
-			}
-
-			wg.Wait()
-
-			fmt.Println(startServerParam.String())
-
-			require.True(t, testTargetCmd.ProcessState.Exited())
-			assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 2)
-		})
+		}
 	}
 }
 
@@ -211,52 +210,54 @@ func TestGsIsOK_シグナルを受信した後はリクエストを受け付け�
 	}{
 		{signalToSend: syscall.SIGINT},
 	}
-	for _, c := range testCases {
-		t.Run(c.signalToSend.String(), func(t *testing.T) {
-			startServerParam := startServerParam{
-				stdout: bytes.NewBufferString(""),
-				stderr: bytes.NewBufferString(""),
-			}
-			testTargetCmd, err := startServer(startServerParam)
-			require.NoError(t, err)
+	for _, binName := range testTargetBinNames {
+		for _, c := range testCases {
+			t.Run(fmt.Sprintf("%s-%s", binName, c.signalToSend.String()), func(t *testing.T) {
+				startServerParam := startServerParam{
+					stdout: bytes.NewBufferString(""),
+					stderr: bytes.NewBufferString(""),
+				}
+				testTargetCmd, err := startServer(binName, startServerParam)
+				require.NoError(t, err)
 
-			wg := sync.WaitGroup{}
+				wg := sync.WaitGroup{}
 
-			chIsSignalSent := make(chan struct{})
+				chIsSignalSent := make(chan struct{})
 
-			wg.Go(func() {
-				time.Sleep(time.Second)
-				require.NoError(t, testTargetCmd.Process.Signal(c.signalToSend))
-				close(chIsSignalSent)
+				wg.Go(func() {
+					time.Sleep(time.Second)
+					require.NoError(t, testTargetCmd.Process.Signal(c.signalToSend))
+					close(chIsSignalSent)
+				})
+
+				wg.Go(func() {
+					_, err := http.DefaultClient.Get("http://localhost:8080/sleep30secs")
+					assert.Error(t, err)
+					assert.ErrorIs(t, err, io.EOF)
+				})
+
+				wg.Go(func() {
+					<-chIsSignalSent
+					time.Sleep(time.Second)
+					_, err := http.DefaultClient.Get("http://localhost:8080/sleep30secs")
+					assert.Error(t, err)
+					var urlerr *url.Error
+					assert.ErrorAs(t, err, &urlerr)
+				})
+
+				var execerr *exec.ExitError
+				if err := testTargetCmd.Wait(); err != nil && !errors.As(err, &execerr) {
+					t.Errorf("failed to wait: %+v", err)
+					return
+				}
+
+				wg.Wait()
+
+				fmt.Println(startServerParam.String())
+
+				require.True(t, testTargetCmd.ProcessState.Exited())
+				assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 2)
 			})
-
-			wg.Go(func() {
-				_, err := http.DefaultClient.Get("http://localhost:8080/sleep30secs")
-				assert.Error(t, err)
-				assert.ErrorIs(t, err, io.EOF)
-			})
-
-			wg.Go(func() {
-				<-chIsSignalSent
-				time.Sleep(time.Second)
-				_, err := http.DefaultClient.Get("http://localhost:8080/sleep30secs")
-				assert.Error(t, err)
-				var urlerr *url.Error
-				assert.ErrorAs(t, err, &urlerr)
-			})
-
-			var execerr *exec.ExitError
-			if err := testTargetCmd.Wait(); err != nil && !errors.As(err, &execerr) {
-				t.Errorf("failed to wait: %+v", err)
-				return
-			}
-
-			wg.Wait()
-
-			fmt.Println(startServerParam.String())
-
-			require.True(t, testTargetCmd.ProcessState.Exited())
-			assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 2)
-		})
+		}
 	}
 }
