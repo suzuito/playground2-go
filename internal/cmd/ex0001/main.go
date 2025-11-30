@@ -12,10 +12,6 @@ import (
 )
 
 func main() {
-	os.Exit(runMain())
-}
-
-func runMain() int {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok") //nolint:errcheck
@@ -29,9 +25,15 @@ func runMain() int {
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 
+	os.Exit(runHandlerWithGracefulShutdown(mux))
+}
+
+// グレースフルシャットダウン付HTTPサーバーのサンプル実装
+func runHandlerWithGracefulShutdown(handler http.Handler) int {
+
 	server := http.Server{
 		Addr:    ":8080",
-		Handler: mux,
+		Handler: handler,
 	}
 
 	// シグナルハンドラーの登録
