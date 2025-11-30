@@ -7,29 +7,27 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/suzuito/playground2-go/internal/gracefulshutdownexample"
 )
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "ok") //nolint:errcheck
-	})
-	mux.HandleFunc("GET /sleep3secs", func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(3 * time.Second)
-		fmt.Fprintln(w, "ok") //nolint:errcheck
-	})
-	mux.HandleFunc("GET /sleep30secs", func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(30 * time.Second)
-		fmt.Fprintln(w, "ok") //nolint:errcheck
-	})
-
-	os.Exit(runHandlerWithGracefulShutdown(mux))
+	gracefulShutdownProcTimeoutSecondsString := os.Getenv("GRACEFUL_SHUTDOWN_PROC_TIMEOUT_SECONDS")
+	gracefulShutdownProcTimeoutSeconds, err := strconv.Atoi(gracefulShutdownProcTimeoutSecondsString)
+	if err != nil {
+		panic(err)
+	}
+	os.Exit(runHandlerWithGracefulShutdown(gracefulShutdownProcTimeoutSeconds, gracefulshutdownexample.NewHandler()))
 }
 
 // グレースフルシャットダウン付HTTPサーバーのサンプル実装
-func runHandlerWithGracefulShutdown(handler http.Handler) int {
+func runHandlerWithGracefulShutdown(
+	gracefulShutdownProcTimeoutSeconds int,
+	handler http.Handler,
+) int {
 
 	server := http.Server{
 		Addr:    ":8080",
@@ -104,10 +102,9 @@ func runHandlerWithGracefulShutdown(handler http.Handler) int {
 	// シグナル受信後の待ち時間設定
 	// シグナルを受信してからサーバーを Graceful shutdown するまでの待ち時間
 	// この待ち時間をどの程度の幅にするか？は、いろいろ考えらえる
-	waitSecondsUntilShutdown := 10
 	ctxTimeout, cancel := context.WithTimeout(
 		context.Background(),
-		time.Duration(waitSecondsUntilShutdown)*time.Second,
+		time.Duration(gracefulShutdownProcTimeoutSeconds)*time.Second,
 	)
 	defer cancel()
 

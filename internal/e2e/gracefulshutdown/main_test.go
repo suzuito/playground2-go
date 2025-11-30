@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -27,7 +28,20 @@ func TestMain(m *testing.M) {
 	os.Exit(runTestMain(m))
 }
 
+// テスト対象となるバイナリファイルの名前
 var testTargetBinNames = []string{"ex0001.cmd", "ex0002.cmd"}
+
+type testCase struct {
+	// HTTPリクエストの処理にかかる時間(秒)
+	RequestProcSeconds int
+
+	// グレースフルシャットダウンの処理のタイムアウト時間(秒)
+	// すなわちシグナル受信〜シャットダウンまでの待ち時間
+	GracefulShutdownProcTimeoutSeconds int
+
+	// バイナリファイルへ送られるシグナル
+	SignalToSend os.Signal
+}
 
 func runTestMain(
 	m *testing.M,
@@ -62,29 +76,33 @@ func runCommand(cmd *exec.Cmd) error {
 }
 
 type startServerParam struct {
-	stdout *bytes.Buffer
-	stderr *bytes.Buffer
+	BinName                            string
+	Stdout                             *bytes.Buffer
+	Stderr                             *bytes.Buffer
+	GracefulShutdownProcTimeoutSeconds int
 }
 
 func (t startServerParam) String() string {
 	s := ""
 	s += "**** STDOUT ****\n"
-	s += t.stdout.String()
+	s += t.Stdout.String()
 	s += "\n"
 	s += "**** STDERR ****\n"
-	s += t.stderr.String()
+	s += t.Stderr.String()
 	s += "\n"
 	return s
 }
 
-func startServer(binName string, p startServerParam) (*exec.Cmd, error) {
-	testTargetCmd := exec.Command(fmt.Sprintf("../../../%s", binName))
-	if p.stdout != nil {
-		testTargetCmd.Stdout = p.stdout
+// サーバー(バイナリファイル)を起動する
+func startServer(p startServerParam) (*exec.Cmd, error) {
+	testTargetCmd := exec.Command(fmt.Sprintf("../../../%s", p.BinName))
+	if p.Stdout != nil {
+		testTargetCmd.Stdout = p.Stdout
 	}
-	if p.stderr != nil {
-		testTargetCmd.Stderr = p.stderr
+	if p.Stderr != nil {
+		testTargetCmd.Stderr = p.Stderr
 	}
+	testTargetCmd.Env = append(testTargetCmd.Env, "GRACEFUL_SHUTDOWN_PROC_TIMEOUT_SECONDS="+strconv.Itoa(p.GracefulShutdownProcTimeoutSeconds))
 
 	if err := testTargetCmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start target command: %w", err)
@@ -110,31 +128,41 @@ func startServer(binName string, p startServerParam) (*exec.Cmd, error) {
 }
 
 func TestGsIsOK_処理中のリクエストの完了を待ってからグレースフルシャットダウンする(t *testing.T) {
-	testCases := []struct {
-		signalToSend os.Signal
-	}{
-		{signalToSend: syscall.SIGINT},
-		{signalToSend: syscall.SIGTERM},
+	testCases := []testCase{
+		{
+			RequestProcSeconds:                 3,
+			GracefulShutdownProcTimeoutSeconds: 10,
+			SignalToSend:                       syscall.SIGINT,
+		},
+		{
+			RequestProcSeconds:                 3,
+			GracefulShutdownProcTimeoutSeconds: 10,
+			SignalToSend:                       syscall.SIGTERM,
+		},
 	}
 	for _, binName := range testTargetBinNames {
 		for _, c := range testCases {
-			t.Run(fmt.Sprintf("%s-%s", binName, c.signalToSend.String()), func(t *testing.T) {
-				startServerParam := startServerParam{
-					stdout: bytes.NewBufferString(""),
-					stderr: bytes.NewBufferString(""),
+			t.Run(fmt.Sprintf("%s-%s", binName, c.SignalToSend.String()), func(t *testing.T) {
+				p := startServerParam{
+					BinName:                            binName,
+					Stdout:                             bytes.NewBufferString(""),
+					Stderr:                             bytes.NewBufferString(""),
+					GracefulShutdownProcTimeoutSeconds: c.GracefulShutdownProcTimeoutSeconds,
 				}
-				testTargetCmd, err := startServer(binName, startServerParam)
+				testTargetCmd, err := startServer(p)
 				require.NoError(t, err)
 
 				wg := sync.WaitGroup{}
 
 				wg.Go(func() {
+					// シグナルをサーバープロセスへ送信する
 					time.Sleep(time.Second)
-					require.NoError(t, testTargetCmd.Process.Signal(c.signalToSend))
+					require.NoError(t, testTargetCmd.Process.Signal(c.SignalToSend))
 				})
 
 				wg.Go(func() {
-					res, err := http.DefaultClient.Get("http://localhost:8080/sleep3secs")
+					// サーバーへリクエストする
+					res, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:8080/sleep?seconds=%d", c.RequestProcSeconds))
 					if !assert.NoError(t, err) {
 						return
 					}
@@ -149,7 +177,7 @@ func TestGsIsOK_処理中のリクエストの完了を待ってからグレー�
 
 				wg.Wait()
 
-				fmt.Println(startServerParam.String())
+				fmt.Println(p.String())
 
 				require.True(t, testTargetCmd.ProcessState.Exited())
 				assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 0)
@@ -158,31 +186,37 @@ func TestGsIsOK_処理中のリクエストの完了を待ってからグレー�
 	}
 }
 
-func TestGsIsOK_処理中のリクエストが完了しなかった場合は強制シャットダウンする(t *testing.T) {
-	testCases := []struct {
-		signalToSend os.Signal
-	}{
-		{signalToSend: syscall.SIGINT},
+func TestGsIsError_処理中のリクエストが完了しなかった場合は強制シャットダウンする(t *testing.T) {
+	testCases := []testCase{
+		{
+			RequestProcSeconds:                 9999,
+			GracefulShutdownProcTimeoutSeconds: 10,
+			SignalToSend:                       syscall.SIGINT,
+		},
 	}
 	for _, binName := range testTargetBinNames {
 		for _, c := range testCases {
-			t.Run(fmt.Sprintf("%s-%s", binName, c.signalToSend.String()), func(t *testing.T) {
-				startServerParam := startServerParam{
-					stdout: bytes.NewBufferString(""),
-					stderr: bytes.NewBufferString(""),
+			t.Run(fmt.Sprintf("%s-%s", binName, c.SignalToSend.String()), func(t *testing.T) {
+				p := startServerParam{
+					BinName:                            binName,
+					Stdout:                             bytes.NewBufferString(""),
+					Stderr:                             bytes.NewBufferString(""),
+					GracefulShutdownProcTimeoutSeconds: c.GracefulShutdownProcTimeoutSeconds,
 				}
-				testTargetCmd, err := startServer(binName, startServerParam)
+				testTargetCmd, err := startServer(p)
 				require.NoError(t, err)
 
 				wg := sync.WaitGroup{}
 
 				wg.Go(func() {
+					// シグナルをサーバープロセスへ送信する
 					time.Sleep(time.Second)
-					require.NoError(t, testTargetCmd.Process.Signal(c.signalToSend))
+					require.NoError(t, testTargetCmd.Process.Signal(c.SignalToSend))
 				})
 
 				wg.Go(func() {
-					_, err := http.DefaultClient.Get("http://localhost:8080/sleep30secs")
+					// サーバーへリクエストする
+					_, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:8080/sleep?seconds=%d", c.RequestProcSeconds))
 					assert.Error(t, err)
 					assert.ErrorIs(t, err, io.EOF)
 				})
@@ -195,7 +229,7 @@ func TestGsIsOK_処理中のリクエストが完了しなかった場合は強�
 
 				wg.Wait()
 
-				fmt.Println(startServerParam.String())
+				fmt.Println(p.String())
 
 				require.True(t, testTargetCmd.ProcessState.Exited())
 				assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 2)
@@ -205,19 +239,23 @@ func TestGsIsOK_処理中のリクエストが完了しなかった場合は強�
 }
 
 func TestGsIsOK_シグナルを受信した後はリクエストを受け付けなくなる(t *testing.T) {
-	testCases := []struct {
-		signalToSend os.Signal
-	}{
-		{signalToSend: syscall.SIGINT},
+	testCases := []testCase{
+		{
+			RequestProcSeconds:                 9,
+			GracefulShutdownProcTimeoutSeconds: 10,
+			SignalToSend:                       syscall.SIGINT,
+		},
 	}
 	for _, binName := range testTargetBinNames {
 		for _, c := range testCases {
-			t.Run(fmt.Sprintf("%s-%s", binName, c.signalToSend.String()), func(t *testing.T) {
-				startServerParam := startServerParam{
-					stdout: bytes.NewBufferString(""),
-					stderr: bytes.NewBufferString(""),
+			t.Run(fmt.Sprintf("%s-%s", binName, c.SignalToSend.String()), func(t *testing.T) {
+				p := startServerParam{
+					BinName:                            binName,
+					Stdout:                             bytes.NewBufferString(""),
+					Stderr:                             bytes.NewBufferString(""),
+					GracefulShutdownProcTimeoutSeconds: c.GracefulShutdownProcTimeoutSeconds,
 				}
-				testTargetCmd, err := startServer(binName, startServerParam)
+				testTargetCmd, err := startServer(p)
 				require.NoError(t, err)
 
 				wg := sync.WaitGroup{}
@@ -225,21 +263,22 @@ func TestGsIsOK_シグナルを受信した後はリクエストを受け付け�
 				chIsSignalSent := make(chan struct{})
 
 				wg.Go(func() {
+					// シグナルをサーバープロセスへ送信する
 					time.Sleep(time.Second)
-					require.NoError(t, testTargetCmd.Process.Signal(c.signalToSend))
+					require.NoError(t, testTargetCmd.Process.Signal(c.SignalToSend))
 					close(chIsSignalSent)
 				})
 
 				wg.Go(func() {
-					_, err := http.DefaultClient.Get("http://localhost:8080/sleep30secs")
-					assert.Error(t, err)
-					assert.ErrorIs(t, err, io.EOF)
+					// サーバーへリクエストする
+					_, err := http.DefaultClient.Get(fmt.Sprintf("http://localhost:8080/sleep?seconds=%d", c.RequestProcSeconds))
+					assert.NoError(t, err)
 				})
 
 				wg.Go(func() {
 					<-chIsSignalSent
 					time.Sleep(time.Second)
-					_, err := http.DefaultClient.Get("http://localhost:8080/sleep30secs")
+					_, err := http.DefaultClient.Get("http://localhost:8080/sleep?seconds=0")
 					assert.Error(t, err)
 					var urlerr *url.Error
 					assert.ErrorAs(t, err, &urlerr)
@@ -253,10 +292,10 @@ func TestGsIsOK_シグナルを受信した後はリクエストを受け付け�
 
 				wg.Wait()
 
-				fmt.Println(startServerParam.String())
+				fmt.Println(p.String())
 
 				require.True(t, testTargetCmd.ProcessState.Exited())
-				assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 2)
+				assert.Equal(t, testTargetCmd.ProcessState.ExitCode(), 0)
 			})
 		}
 	}
