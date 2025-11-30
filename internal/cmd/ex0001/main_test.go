@@ -44,10 +44,10 @@ func runTestMain(m *testing.M) int {
 }
 
 func runCommand(cmd *exec.Cmd) error {
-	fmt.Fprintf(cmd.Stdout, "==== Executed command started on %s ====\n", cmd.Dir)
-	fmt.Fprintf(cmd.Stdout, "$ %s\n", strings.Join(cmd.Args, " "))
+	fmt.Fprintf(cmd.Stdout, "==== Executed command started on %s ====\n", cmd.Dir) //nolint:errcheck
+	fmt.Fprintf(cmd.Stdout, "$ %s\n", strings.Join(cmd.Args, " "))                 //nolint:errcheck
 	err := cmd.Run()
-	fmt.Fprintln(cmd.Stdout, "==== Executed command finished ====")
+	fmt.Fprintln(cmd.Stdout, "==== Executed command finished ====") //nolint:errcheck
 	return err
 }
 
@@ -88,7 +88,7 @@ func startServer(p startServerParam) (*exec.Cmd, error) {
 		if err != nil {
 			continue
 		}
-		res.Body.Close()
+		res.Body.Close() //nolint:errcheck
 
 		if res.StatusCode == http.StatusOK {
 			break

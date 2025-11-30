@@ -18,15 +18,15 @@ func main() {
 func runMain() int {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
+		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	mux.HandleFunc("GET /sleep3secs", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(3 * time.Second)
-		w.Write([]byte("ok"))
+		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	mux.HandleFunc("GET /sleep30secs", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(30 * time.Second)
-		w.Write([]byte("ok"))
+		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 
 	server := http.Server{
