@@ -59,6 +59,7 @@ func runHandlerWithGracefulShutdown(handler http.Handler) int {
 	chGracefulShutdown := make(chan error)
 	go func() {
 		<-ctxSignal.Done()
+		stop()
 		fmt.Printf("catch signal: %+v\n", context.Cause(ctxSignal))
 
 		// シグナル受信後の待ち時間設定
@@ -89,7 +90,9 @@ func runHandlerWithGracefulShutdown(handler http.Handler) int {
 	// ListenAndServeメソッドは ErrServerClosed エラーを返す
 	// そうでない場合においては、そのエラー内容を返す
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		// シグナルを受信していないけどなんらかの理由でサーバーがエラー終了した場合、このパスが実行される
 		fmt.Printf("server finished with error: %+v\n", err)
+		return 1
 	} else {
 		fmt.Println("server finished")
 	}

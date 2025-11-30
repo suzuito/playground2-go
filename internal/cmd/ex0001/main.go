@@ -94,6 +94,7 @@ func runHandlerWithGracefulShutdown(handler http.Handler) int {
 		return 0
 	case <-ctxSignal.Done():
 		// シグナルの受信
+		stop()
 	}
 
 	// シグナル受信後の処理をここから下に書く
