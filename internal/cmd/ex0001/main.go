@@ -34,9 +34,12 @@ func runMain() int {
 		Handler: mux,
 	}
 
+	// シグナルハンドラーの登録
 	// ctxSignal は、シグナルをキャッチしたらctxSignal.Done()チャンネルがクローズされる
 	ctxSignal, stop := signal.NotifyContext(
 		context.Background(),
+
+		// キャッチするシグナルの種類を指定する
 
 		// SIGINT はUnix互換OSだけなので、OSの違いが吸収できるos.Interruptを使った方が良い
 		// os.Interruptはプログラムの中断シグナル。プログラム実行中に Ctrl+C を叩くと、SIGINT シグナルがプログラムへ送られる。
@@ -50,42 +53,69 @@ func runMain() int {
 	)
 	defer stop()
 
-	chServerIsDone := make(chan error)
+	// サーバーの起動
+	chTCPListenIsDone := make(chan error)
 	go func() {
 		fmt.Println("server started")
+
+		// リスン状態を開始する
+		// 意図的なリスン状態の終了(Server.Shutdown または Server.Close が実行されたことによる終了)においては
+		// ListenAndServeメソッドは ErrServerClosed エラーを返す
+		// そうでない場合においては、そのエラー内容を返す
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			chServerIsDone <- err
+			fmt.Printf("server finished with error: %+v\n", err)
+			chTCPListenIsDone <- err
+		} else {
+			fmt.Println("server finished")
 		}
-		close(chServerIsDone)
+
+		close(chTCPListenIsDone)
 	}()
 
+	// サーバーの終了、または、シグナルの受信、を待つ
 	select {
+	case err := <-chTCPListenIsDone:
+		// サーバーの終了
+
+		if err != nil {
+			// シグナルを受信していないけどなんらかの理由でサーバーがエラー終了した場合、このパスが実行される
+			fmt.Printf("server listen is finished with error: %+v\n", err)
+			return 1
+		}
+
+		// シグナルを受信していないけどサーバーが正常終了した場合、このパスが実行される
+		// シグナルを受信するまでサーバーが正常終了することはありえないため
+		// 理論上、このパスを通ることは考えられないが
+		// もしこのパスを通るとしたら、意味としては
+		// エラーなくリスン状態を終了したことを意味する
+		fmt.Println("server listen is finished")
+		return 0
 	case <-ctxSignal.Done():
-		// シグナルを受信した場合、このパスが実行される
-		fmt.Printf("catch signal: %+v\n", context.Cause(ctxSignal))
-	case err := <-chServerIsDone:
-		// シグナルを受信していないけどなんらかの理由でサーバーがエラー終了した場合、このパスが実行される
-		fmt.Printf("failed to server listen and serve: %+v\n", err)
-		return 1
+		// シグナルの受信
 	}
 
+	// シグナル受信後の処理をここから下に書く
+
+	fmt.Printf("catch signal: %+v\n", context.Cause(ctxSignal))
+
+	// シグナル受信後の待ち時間設定
+	// シグナルを受信してからサーバーを Graceful shutdown するまでの待ち時間
+	// この待ち時間をどの程度の幅にするか？は、いろいろ考えらえる
 	waitSecondsUntilShutdown := 10
 	ctxTimeout, cancel := context.WithTimeout(
 		context.Background(),
-
-		// シグナルを受信してからサーバーを Graceful shutdown するまでの待ち時間
-		// この待ち時間は、クラウドインフラによって様々。
-		// https://docs.cloud.google.com/run/docs/container-contract#instance-shutdown
-		// Cloud Run では、SIGTERMを送ってから10秒経ってもコンテナが生きている場合、SIGKILLを送る
 		time.Duration(waitSecondsUntilShutdown)*time.Second,
 	)
 	defer cancel()
 
+	// グレースフルシャットダウンの実行
+	// contextのキャンセルが発生した場合(例えば、シグナル受信後の待ち時間以内にグレースフルシャットダウンできなかった、など)
+	// Shutdownメソッドはエラーを返す
 	if err := server.Shutdown(ctxTimeout); err != nil {
 		fmt.Printf("failed to graceful shutdown: %+v\n", err)
 		return 2
 	}
-	fmt.Println("graceful shutdown is ok")
 
+	fmt.Println("graceful shutdown is ok")
 	return 0
 }
