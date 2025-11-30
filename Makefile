@@ -10,7 +10,10 @@ lint: $(BIN_GOLANGCI_LINT)
 	$(BIN_GOLANGCI_LINT) run ./...
 
 test:
-	go test -v ./...
+	go test -v -count=1 ./...
 
 ex0001.cmd: $(GO_SOURCES)
 	go build -o ex0001.cmd internal/cmd/ex0001/*.go
+
+ex0002.cmd: $(GO_SOURCES)
+	go build -o ex0002.cmd internal/cmd/ex0002/*.go

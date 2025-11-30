@@ -1,4 +1,4 @@
-package main
+package gracefulshutdown
 
 import (
 	"bytes"
@@ -21,17 +21,32 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(runTestMain(m))
+	os.Exit(runTestMain(m, buildCommand{
+		Name: "make",
+		Args: []string{"ex0001.cmd"},
+	}))
+	os.Exit(runTestMain(m, buildCommand{
+		Name: "make",
+		Args: []string{"ex0002.cmd"},
+	}))
 }
 
-func runTestMain(m *testing.M) int {
+type buildCommand struct {
+	Name string
+	Args []string
+}
+
+func runTestMain(
+	m *testing.M,
+	bc buildCommand,
+) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Printf("failed to get wd: %v", err)
 		return 1
 	}
 
-	buildCmd := exec.Command("make", "ex0001.cmd")
+	buildCmd := exec.Command(bc.Name, bc.Args...)
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stderr
 	buildCmd.Dir = path.Join(wd, "..", "..", "..")
