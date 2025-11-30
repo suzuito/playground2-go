@@ -1,0 +1,8 @@
+on:
+  pull_request:
+
+jobs:
+  test:
+    uses: ./.github/workflows/_test.yaml
+  lint:
+    uses: ./.github/workflows/_lint.yaml
