@@ -92,6 +92,8 @@ func runHandlerWithGracefulShutdown(
 		return 0
 	case <-ctxSignal.Done():
 		// シグナルの受信
+
+		// シグナルハンドラーを解除するために stop 関数を実行する
 		stop()
 	}
 
