@@ -1,6 +1,7 @@
 package gracefulshutdownexample
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -21,11 +22,11 @@ func NewHandler(
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	mux.HandleFunc("GET /sleep3secs", func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(3 * time.Second)
+		sleep(r.Context(), 3*time.Second)
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	mux.HandleFunc("GET /sleep30secs", func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(30 * time.Second)
+		sleep(r.Context(), 30*time.Second)
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	mux.HandleFunc("GET /sleep", func(w http.ResponseWriter, r *http.Request) {
@@ -35,8 +36,17 @@ func NewHandler(
 		if err != nil {
 			seconds = 0
 		}
-		time.Sleep(time.Duration(seconds) * time.Second)
+		sleep(r.Context(), time.Duration(seconds)*time.Second)
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	return mux
+}
+
+func sleep(ctx context.Context, duration time.Duration) error {
+	select {
+	case <-time.After(duration):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -16,37 +16,52 @@ import (
 )
 
 func main() {
-	gracefulShutdownProcTimeoutSecondsString := os.Getenv("GRACEFUL_SHUTDOWN_PROC_TIMEOUT_SECONDS")
-	gracefulShutdownProcTimeoutSeconds, err := strconv.Atoi(gracefulShutdownProcTimeoutSecondsString)
-	if err != nil {
-		panic(err)
-	}
-
 	isGracefulShutdownProcStarted := atomic.Bool{}
-
-	os.Exit(runHandlerWithGracefulShutdown(
-		gracefulShutdownProcTimeoutSeconds,
-		gracefulshutdownexample.NewHandler(&isGracefulShutdownProcStarted),
-		&isGracefulShutdownProcStarted,
-	))
-}
-
-// グレースフルシャットダウン付HTTPサーバーのサンプル実装
-func runHandlerWithGracefulShutdown(
-	gracefulShutdownProcTimeoutSeconds int,
-	handler http.Handler,
-	isGracefulShutdownProcStarted *atomic.Bool,
-) int {
-
+	handler := gracefulshutdownexample.NewHandler(&isGracefulShutdownProcStarted)
 	server := http.Server{
 		Addr:    ":8080",
 		Handler: handler,
 	}
 
+	os.Exit(runHandlerWithGracefulShutdown(
+		context.Background(),
+		options{
+			GracefulShutdownProcTimeoutSeconds:              10,
+			ForcefullyHttpRequestCancellationTimeoutSeconds: 3,
+			IsGracefulShutdownProcStarted:                   &isGracefulShutdownProcStarted,
+		},
+		&server,
+	))
+}
+
+type options struct {
+	// シグナル受信後、処理中であるHTTPリクエストが終了するまで待つ時間(秒)
+	GracefulShutdownProcTimeoutSeconds int
+
+	// 強制的なHTTPリクエストキャンセルが終了するまで待つ時間(秒)
+	ForcefullyHttpRequestCancellationTimeoutSeconds int
+
+	// グレースフルシャットダウンが開始されたら true となる
+	IsGracefulShutdownProcStarted *atomic.Bool
+}
+
+// グレースフルシャットダウン付HTTPサーバーのサンプル実装
+func runHandlerWithGracefulShutdown(
+	ctx context.Context,
+	opts options,
+	server *http.Server,
+) int {
+
+	ctxBaseRequest, cancelCtxBaseRequest := context.WithCancel(context.Background())
+	defer cancelCtxBaseRequest()
+	server.BaseContext = func(l net.Listener) context.Context {
+		return ctxBaseRequest
+	}
+
 	// シグナルハンドラーの登録
 	// ctxSignal は、シグナルをキャッチしたらctxSignal.Done()チャンネルがクローズされる
 	ctxSignal, stop := signal.NotifyContext(
-		context.Background(),
+		ctx,
 
 		// キャッチするシグナルの種類を指定する
 
@@ -100,13 +115,13 @@ func runHandlerWithGracefulShutdown(
 		fmt.Println("server listen is finished")
 		return 0
 	case <-ctxSignal.Done():
-		// シグナルの受信
+		// シグナルを受信
 
 		// シグナルハンドラーを解除するために stop 関数を実行する
 		stop()
 
-		if isGracefulShutdownProcStarted != nil {
-			isGracefulShutdownProcStarted.Store(true)
+		if opts.IsGracefulShutdownProcStarted != nil {
+			opts.IsGracefulShutdownProcStarted.Store(true)
 		}
 	}
 
@@ -119,15 +134,21 @@ func runHandlerWithGracefulShutdown(
 	// この待ち時間をどの程度の幅にするか？は、いろいろ考えらえる
 	ctxTimeout, cancel := context.WithTimeout(
 		context.Background(),
-		time.Duration(gracefulShutdownProcTimeoutSeconds)*time.Second,
+		time.Duration(opts.GracefulShutdownProcTimeoutSeconds)*time.Second,
 	)
 	defer cancel()
 
 	// グレースフルシャットダウンの実行
 	// contextのキャンセルが発生した場合(例えば、シグナル受信後の待ち時間以内にグレースフルシャットダウンできなかった、など)
 	// Shutdownメソッドはエラーを返す
-	if err := server.Shutdown(ctxTimeout); err != nil {
+	err := server.Shutdown(ctxTimeout)
+	if err != nil {
+		cancelCtxBaseRequest()
 		fmt.Printf("failed to graceful shutdown: %+v\n", err)
+		fmt.Println("waiting to cancel http request is started")
+		time.Sleep(time.Duration(opts.ForcefullyHttpRequestCancellationTimeoutSeconds) * time.Second)
+		fmt.Println("waiting to cancel http request is finished")
+		fmt.Println("exit server forcefully")
 		return 2
 	}
 
