@@ -4,12 +4,20 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
-func NewHandler() http.Handler {
+func NewHandler(
+	isGracefulShutdownProcStarted *atomic.Bool,
+) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		if isGracefulShutdownProcStarted != nil && isGracefulShutdownProcStarted.Load() {
+			fmt.Fprintf(w, "graceful shutdown is started")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	mux.HandleFunc("GET /sleep3secs", func(w http.ResponseWriter, r *http.Request) {

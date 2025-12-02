@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -20,13 +21,21 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	os.Exit(runHandlerWithGracefulShutdown(gracefulShutdownProcTimeoutSeconds, gracefulshutdownexample.NewHandler()))
+
+	isGracefulShutdownProcStarted := atomic.Bool{}
+
+	os.Exit(runHandlerWithGracefulShutdown(
+		gracefulShutdownProcTimeoutSeconds,
+		gracefulshutdownexample.NewHandler(&isGracefulShutdownProcStarted),
+		&isGracefulShutdownProcStarted,
+	))
 }
 
 // グレースフルシャットダウン付HTTPサーバーのサンプル実装
 func runHandlerWithGracefulShutdown(
 	gracefulShutdownProcTimeoutSeconds int,
 	handler http.Handler,
+	isGracefulShutdownProcStarted *atomic.Bool,
 ) int {
 
 	server := http.Server{
@@ -95,6 +104,10 @@ func runHandlerWithGracefulShutdown(
 
 		// シグナルハンドラーを解除するために stop 関数を実行する
 		stop()
+
+		if isGracefulShutdownProcStarted != nil {
+			isGracefulShutdownProcStarted.Store(true)
+		}
 	}
 
 	// シグナル受信後の処理をここから下に書く
