@@ -12,6 +12,9 @@ lint: $(BIN_GOLANGCI_LINT)
 test:
 	go test -v -count=1 ./...
 
+fmt:
+	go fmt ./...
+
 ex0001.cmd: $(GO_SOURCES)
 	go build -o ex0001.cmd internal/cmd/ex0001/*.go
 
