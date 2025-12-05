@@ -14,7 +14,7 @@ sequenceDiagram
  actor agent # エージェント
 
  client->>client: GitHubのissueを作成する
- client->>agent: issueを依頼する
+ client->>agent: issueをエージェントへ依頼する
 ```
 
 ### GitHubのissueを作成する
@@ -43,17 +43,6 @@ sequenceDiagram
     - ただし、制約を定性的に書いていただいても構いません
   - サブタスクにはPRのURLを掲載してください
 
-GitHubのissueを作成してください
+### issueをエージェントへ依頼する
 
-
-起点に開発を進めてください。このIssueには
-- 1つのタスクにつき、1つの PR を作成する
-- `update` ブランチをベースにしてブランチを切る
-- PR を作成したら私へレビューを依頼する
-- レビューが OK なら、私が PR をマージしてタスク完了
-
-## 開発の約束
-
-- ソースコード修正後の検証方法については `README.md` に書かれていることに従ってください。
-- ソフトウェアアーキテクチャについては `README.md` に書かれていることに従ってください。
-- コーディング規約については `CODING_GUIDANCE.md` に書かれていることに従ってください。
+考え中
