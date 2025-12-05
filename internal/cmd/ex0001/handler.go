@@ -1,4 +1,4 @@
-package gracefulshutdownexample
+package main
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func NewHandler(
+func newHandler(
 	isGracefulShutdownProcStarted *atomic.Bool,
 ) http.Handler {
 	mux := http.NewServeMux()

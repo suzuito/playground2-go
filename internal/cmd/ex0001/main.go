@@ -11,13 +11,11 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	"github.com/suzuito/playground2-go/internal/gracefulshutdownexample"
 )
 
 func main() {
 	isGracefulShutdownProcStarted := atomic.Bool{}
-	handler := gracefulshutdownexample.NewHandler(&isGracefulShutdownProcStarted)
+	handler := newHandler(&isGracefulShutdownProcStarted)
 	server := http.Server{
 		Addr:    ":8080",
 		Handler: handler,
