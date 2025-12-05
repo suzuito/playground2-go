@@ -6,7 +6,15 @@
 ## タスクの進め方
 
 ```mermaid
+---
+title: タスクの進め方
+---
+sequenceDiagram
+ actor client # 人
+ actor agent # エージェント
 
+ client->>client: GitHubのissueを作成する
+ client->>agent: issueを依頼する
 ```
 
 ### GitHubのissueを作成する
