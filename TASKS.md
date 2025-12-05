@@ -3,26 +3,13 @@
 エージェントにタスクを依頼する人間が従うべきガイドラインです。
 タスクとは、達成基準が定義された期限付きの作業のことであり、本レポジトリ上に対する変更を伴う作業を指します。
 
-## エージェントによるタスクの進め方
-
-エージェントは以下のフローに従ってタスクを進めてください。
+## タスクの進め方
 
 ```mermaid
----
-title: タスクのライフサイクル
----
-flowchart LR
-    start[開始]
-    create_environment[Environmentを作成する]
-    create_issue_contents[GitHubのissueの内容を決定する]
 
-    start --> create_environment
-    create_environment --> aaa
 ```
 
-### 各工程で実施すること
-
-#### GitHubのissueの内容を決定する
+### GitHubのissueを作成する
 
 タスクをissueに
 
