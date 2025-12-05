@@ -15,18 +15,26 @@ func newHandler(
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		if isGracefulShutdownProcStarted != nil && isGracefulShutdownProcStarted.Load() {
-			fmt.Fprintf(w, "graceful shutdown is started")
 			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprintf(w, "graceful shutdown is started") // nolint:errcheck
 			return
 		}
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	mux.HandleFunc("GET /sleep3secs", func(w http.ResponseWriter, r *http.Request) {
-		sleep(r.Context(), 3*time.Second)
+		if err := sleep(r.Context(), 3*time.Second); err != nil {
+			w.WriteHeader(http.StatusInternalServerError) //nolint:errcheck
+			fmt.Fprintf(w, "failed to sleep: %+v", err)   // nolint:errcheck
+			return
+		}
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	mux.HandleFunc("GET /sleep30secs", func(w http.ResponseWriter, r *http.Request) {
-		sleep(r.Context(), 30*time.Second)
+		if err := sleep(r.Context(), 30*time.Second); err != nil {
+			w.WriteHeader(http.StatusInternalServerError) //nolint:errcheck
+			fmt.Fprintf(w, "failed to sleep: %+v", err)   // nolint:errcheck
+			return
+		}
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	mux.HandleFunc("GET /sleep", func(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +44,13 @@ func newHandler(
 		if err != nil {
 			seconds = 0
 		}
-		sleep(r.Context(), time.Duration(seconds)*time.Second)
+
+		if err := sleep(r.Context(), time.Duration(seconds)*time.Second); err != nil {
+			w.WriteHeader(http.StatusInternalServerError) //nolint:errcheck
+			fmt.Fprintf(w, "failed to sleep: %+v", err)   // nolint:errcheck
+			return
+		}
+
 		fmt.Fprintln(w, "ok") //nolint:errcheck
 	})
 	return mux
