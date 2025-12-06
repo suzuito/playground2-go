@@ -43,7 +43,7 @@ type options struct {
 	IsGracefulShutdownProcStarted *atomic.Bool
 }
 
-// グレースフルシャットダウン付HTTPサーバーのサンプル実装.
+// グレースフルシャットダウン付HTTPサーバーのサンプル実装
 func runHandlerWithGracefulShutdown(
 	ctx context.Context,
 	opts options,
