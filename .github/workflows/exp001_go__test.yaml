@@ -11,5 +11,5 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: apps/exp001/go/go.mod
       - run: make test
