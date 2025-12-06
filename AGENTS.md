@@ -6,7 +6,7 @@
 - タスクは、GitHubのissueとして言語化されています。エージェントはissueに書かれていることの達成を目指してください。
 - わからないことや不明点があれば、人間に質問してください。
 
-エージェントと人間の役割分担
+## エージェントと人間の役割分担
 
 - エージェントの責務
   - エージェントは成果物を作成して下さい
@@ -46,10 +46,10 @@
     - [MermaidのEntity Relationship Diagram](https://mermaid.js.org/syntax/entityRelationshipDiagram.html)で書いてください
 - 構成図
   - 形式
-    - [MermaidのEntity flowchart](https://mermaid.js.org/syntax/flowchart.html)で書いてください
+    - [Mermaidのflowchart](https://mermaid.js.org/syntax/flowchart.html)で書いてください
 - シーケンス図
   - 形式
-    - [MermaidのEntity Sequence Diagram](https://mermaid.js.org/syntax/sequenceDiagram.html)で書いてください
+    - [MermaidのSequence Diagram](https://mermaid.js.org/syntax/sequenceDiagram.html)で書いてください
 
 以下は設計タスクの進め方です。
 
@@ -121,11 +121,11 @@ sequenceDiagram
       - タイトルを見ただけでそのチケットの内容がわかるようになっていると嬉しいです
     - 「ゴール」の書き方
       - 1つの項目には1つの達成基準を書いてください
-      - 達成基準を可能な限り訂正的に定量的に表現してください
+      - 達成基準を可能な限り定量的に表現してください
       - ただし、達成基準を定性的に書いていただいても構いません
     - 「制約」の書き方
       - 1つの項目には1つの制約を書いてください
-      - 制約を可能な限り訂正的に定量的に表現してください
+      - 制約を可能な限り定量的に表現してください
       - ただし、制約を定性的に書いていただいても構いません
     - 「背景」の書き方
       - ゴールを達成しなければならない理由を書いてください
