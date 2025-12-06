@@ -1,0 +1,12 @@
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/exp001/go/**'
+
+jobs:
+  test:
+    uses: ./.github/workflows/_go_test.yaml
+  lint:
+    uses: ./.github/workflows/_go_lint.yaml
