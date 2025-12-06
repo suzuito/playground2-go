@@ -66,16 +66,20 @@
 
 ```mermaid
 ---
-title: タスクのライフサイクル
+title: タスクの進め方
 ---
-flowchart LR
-    start[要求チケットを作成する]
-    create_environment[Environmentを作成する]
-    create_issue_contents[GitHubのissueの内容を決定する]
+sequenceDiagram
+ actor client # (人間)要求者
+ actor developer # (人間)開発者
+ actor agent # (エージェント)開発者
 
-    start --> create_environment
-    create_environment --> aaa
+ client->>client: 要求チケットを作成する
+ client->>agent: issueをエージェントへ依頼する
 ```
+
+- 要求チケットを作成する
+  - clientは`type: 要求`ラベルを付与したGitHub issueを作成する
+- 
 
 ### 各工程で実施すること
 
