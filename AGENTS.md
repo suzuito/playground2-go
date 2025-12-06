@@ -6,6 +6,17 @@
 - タスクは、GitHubのissueとして言語化されています。エージェントはissueに書かれていることの達成を目指してください。
 - わからないことや不明点があれば、人間に質問してください。
 
+エージェントと人間の役割分担
+
+- エージェントの責務
+  - エージェントは成果物を作成して下さい
+  - 成果物はフェーズによって異なります。何が成果物かは人間に聞いて下さい
+  - 人間の質問に答えて下さい
+  - アイディアを出して下さい
+- 人間の責務
+  - エージェントが作成した成果物をレビューして下さい
+  - 意思決定をして下さい
+
 ## タスクのフェーズ
 
 タスクは以下の2種類があります。
@@ -69,28 +80,61 @@
 title: タスクの進め方
 ---
 sequenceDiagram
- actor client # (人間)要求者
- actor developer # (人間)開発者
- actor agent # (エージェント)開発者
+  actor client # (人間)要求者
+  actor developer # (人間)開発者
+  actor agent # (エージェント)開発者
 
- client->>client: 要求チケットを作成する
- client->>agent: issueをエージェントへ依頼する
+  client->>client: 要求チケットを作成する
+  client->>developer: 要求チケットを依頼する
+  developer->>developer: 要求を把握する
+  developer->>developer: 空のAIタスクチケットを作成する
+  loop AIタスクチケットを更新し完成させる
+    developer->>agent: 相談
+    agent->>developer: 相談
+  end
+
+  developer->>agent: AIタスクチケットを依頼する
+  agent->>agent: AIタスク環境をセットアップする
+  loop サブタスクを1つずつ進める
+    agent->>agent: 成果物の作成
+    agent->>developer: 質問やレビュー
+    developer->>agent: 質問やレビュー
+    developer->>developer: 開発環境にデプロイして動作確認する
+    developer->>agent: サブタスクの完了を通知する
+    agent->>agent: サブタスクのステータスを完了へ更新する
+  end
+
+  developer->>developer: AIタスクチケットのレビュー
+  developer->>developer: ステージング環境にデプロイして動作確認する
+  developer->>developer: QAする
+  developer->>developer: リリースする
+  developer->>client: 要求チケットをクローズする
 ```
 
 - 要求チケットを作成する
-  - clientは`type: 要求`ラベルを付与したGitHub issueを作成する
-- 
-
-### 各工程で実施すること
-
-起点に開発を進めてください。このIssueには
-- 1つのタスクにつき、1つの PR を作成する
-- `update` ブランチをベースにしてブランチを切る
-- PR を作成したら私へレビューを依頼する
-- レビューが OK なら、私が PR をマージしてタスク完了
+  - clientは`type: 要求`ラベルを付与したissueを作成する
+- 空のAIタスクチケットを作成する
+  - issueテンプレート(.github/ISSUE_TEMPLATE/ai-task.md)にissueを作成する
+- AIタスクチケットを更新し完成させる
+  - タスクの「タイトル」「ゴール」「制約」「背景」を入力する
+  - タスクをサブタスクへ分解する
+    - サブタスクの粒度は「1人が実行して2時間で完了する」です
+- AIタスク環境をセットアップする
+  - mainブランチをbaseブランチとし、新しいブランチを作成する。このブランチをfeatureブランチと呼ぶ
+  - ブランチ名の命名規則は以下の通り
+    - `iss-<issue番号>`
+  - (必要であれば)CodeX CloudのEnvironmentを作成する
+- サブタスクを1つずつ進める
+  - featureブランチをbaseブランチとし、新しいブランチを作成する。このブランチをsub-featureブランチと呼ぶ
+  - ブランチ名の命名規則は以下の通り
+    - `iss-<issue番号>-<subtask番号>`
+  - 変更をブランチへpushする
+  - ある程度完成したらPRを作成し、コードレビューを依頼する
+  - 人間は開発環境などで動作確認を実施する
+  - PRがマージされたら、サブタスクを完了とし、次のサブタスクへ取り掛かる
 
 ## 開発の約束
 
 - ソースコード修正後の検証方法については `README.md` に書かれていることに従ってください。
 - ソフトウェアアーキテクチャについては `README.md` に書かれていることに従ってください。
-- コーディング規約については `CODING_GUIDANCE.md` に書かれていることに従ってください。
+- コーディング規約については `CODING_GUIDELINE.md` に書かれていることに従ってください。
