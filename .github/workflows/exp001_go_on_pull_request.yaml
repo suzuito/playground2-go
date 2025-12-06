@@ -5,6 +5,6 @@ on:
 
 jobs:
   test:
-    uses: ./.github/workflows/_go_test.yaml
+    uses: ./.github/workflows/exp001_go__test.yaml
   lint:
-    uses: ./.github/workflows/_go_lint.yaml
+    uses: ./.github/workflows/exp001_go__lint.yaml
