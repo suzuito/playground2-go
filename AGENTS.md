@@ -6,7 +6,27 @@
 - タスクは、GitHubのissueとして言語化されています。エージェントはissueに書かれていることの達成を目指してください。
 - わからないことや不明点があれば、人間に質問してください。
 
-## エージェントによるタスクの進め方
+## タスクの進め方
+
+タスクは以下の2種類があります。
+
+- 設計タスク
+- 実装タスク
+
+### 設計タスク
+
+設計タスクは、要求チケットを入力とし人間と相談しながらソフトウェアを設計するタスクです。
+
+本タスクの成果物は以下となります。
+
+- APIの仕様書
+  - 形式
+    - HTTP APIを設計する際は、[Open API v3.1.1 YAML形式](https://raw.githubusercontent.com/OAI/OpenAPI-Specification/refs/tags/3.1.1/versions/3.1.1.md)で書いてください
+    - gRPC APIを設計する際は、proto3で書いてください
+- ER図
+  - 形式
+    - [MermaidのEntity Relationship Diagram](https://mermaid.js.org/syntax/entityRelationshipDiagram.html)で書いてください
+- 構成図
 
 エージェントは以下のフローに従ってタスクを進めてください。
 
