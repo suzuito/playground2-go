@@ -64,7 +64,18 @@
 
 ## タスクの進め方
 
+```mermaid
+---
+title: タスクのライフサイクル
+---
+flowchart LR
+    start[要求チケットを作成する]
+    create_environment[Environmentを作成する]
+    create_issue_contents[GitHubのissueの内容を決定する]
 
+    start --> create_environment
+    create_environment --> aaa
+```
 
 ### 各工程で実施すること
 
