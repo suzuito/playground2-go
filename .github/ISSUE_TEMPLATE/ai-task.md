@@ -2,7 +2,7 @@
 name: AI 向けタスクテンプレート
 about: AIに作業を進めていただく時に、本issueによりタスクを管理します
 title: AI 向けタスクテンプレート
-labels: ''
+labels: 'type: AIタスク'
 assignees: ''
 
 ---
