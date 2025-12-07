@@ -53,6 +53,9 @@
 
 以下は設計タスクの進め方です。
 
+- 設計フェーズの成果物(API仕様、ER図、構成図など)は、原則としてリポジトリ直下の`issues/<要求チケット番号7桁ゼロ埋め>/`配下に保存してください。
+  - 例: 要求チケット#10の成果物 → `issues/0000010/openapi.yaml`
+  - 他の場所へ保存する場合は、人間と相談し承認を得てください。
 - どの成果物を作成すべきについては、人間と協議の上で決定してください。
 - どの成果物をAIエージェントと人間、どちらが作成すべきについては、人間と協議の上で決定してください。
 - 成果物の保存先はissue、または、GitHubレポジトリです。どちらに保存すべきかは、人間と協議の上で決定してください。
@@ -87,26 +90,55 @@ sequenceDiagram
   client->>client: 要求チケットを作成する
   client->>developer: 要求チケットを依頼する
   developer->>developer: 要求を把握する
-  developer->>agent: 要求チケットを依頼する
-  agent->>agent: 要求を把握する
-  agent->>agent: 空のAIタスクチケットを作成する
-  loop AIタスクチケットを更新し完成させる
-    agent->>developer: 相談
-    developer->>agent: 相談
+
+  rect rgb(eee, eee, eee)
+    Note over developer,agent: 設計タスク
+    developer->>agent: 要求チケットを依頼する
+    agent->>agent: 要求を把握する
+    agent->>agent: 空のAIタスクチケットを作成する
+    loop AIタスクチケットを更新し完成させる
+      agent->>developer: 相談
+      developer->>agent: 相談
+    end
+
+    developer->>agent: AIタスクチケットを依頼する
+    agent->>agent: AIタスク環境をセットアップする
+    loop サブタスクを1つずつ進める
+      agent->>agent: 成果物の作成
+      agent->>developer: 質問やレビュー
+      developer->>agent: 質問やレビュー
+      developer->>developer: 開発環境にデプロイして動作確認する
+      developer->>agent: サブタスクの完了を通知する
+      agent->>agent: サブタスクのステータスを完了へ更新する
+    end
+
+    developer->>developer: AIタスクチケットのレビュー
   end
 
-  developer->>agent: AIタスクチケットを依頼する
-  agent->>agent: AIタスク環境をセットアップする
-  loop サブタスクを1つずつ進める
-    agent->>agent: 成果物の作成
-    agent->>developer: 質問やレビュー
-    developer->>agent: 質問やレビュー
-    developer->>developer: 開発環境にデプロイして動作確認する
-    developer->>agent: サブタスクの完了を通知する
-    agent->>agent: サブタスクのステータスを完了へ更新する
+  rect rgb(eee, eee, eee)
+    Note over developer,agent: 実装タスク
+    developer->>agent: 実装を依頼する
+    agent->>agent: 要求と設計を把握する
+    agent->>agent: 空のAIタスクチケットを作成する
+    loop AIタスクチケットを更新し完成させる
+      agent->>developer: 相談
+      developer->>agent: 相談
+    end
+
+    developer->>agent: AIタスクチケットを依頼する
+    agent->>agent: AIタスク環境をセットアップする
+    loop サブタスクを1つずつ進める
+      agent->>agent: 成果物の作成
+      agent->>developer: 質問やレビュー
+      developer->>agent: 質問やレビュー
+      developer->>developer: 開発環境にデプロイして動作確認する
+      developer->>agent: サブタスクの完了を通知する
+      agent->>agent: サブタスクのステータスを完了へ更新する
+    end
+
+    developer->>developer: AIタスクチケットのレビュー
   end
 
-  developer->>developer: AIタスクチケットのレビュー
   developer->>developer: ステージング環境にデプロイして動作確認する
   developer->>developer: QAする
   developer->>developer: リリースする
@@ -114,7 +146,20 @@ sequenceDiagram
 ```
 
 - 要求チケットを作成する
-  - clientは`type: 要求`ラベルを付与したissueを作成する
+  - clientは`type: 要求`ラベルを付与したissueを作成する。これを要求チケットと呼ぶ
+- 要求チケットを依頼する
+  - developerは次のメッセージをAIエージェントへ送る
+  - ```
+    次の要求チケットの設計フェーズを進めて下さい
+    <要求チケットのURL>
+    ```
+- 実装を依頼する
+  - developerは次のメッセージをAIエージェントへ送る
+  - ```
+    次の要求チケットと設計に基づいて実装フェーズを進めて下さい
+    <要求チケットのURL>
+    <設計を実施したissueのURL>
+    ```
 - 空のAIタスクチケットを作成する
   - issueテンプレート(.github/ISSUE_TEMPLATE/ai-task.md)にissueを作成する
 - AIタスクチケットを更新し完成させる
@@ -134,7 +179,7 @@ sequenceDiagram
       - ゴールの決定経緯を書いてください
   - タスクをサブタスクへ分解する
     - サブタスクの粒度は「1人が実行して2時間で完了する」です
-- AIタスクチケットを依頼する
+- (設計タスク)AIタスクチケットを依頼する
   - AIタスクチケットを進めることを依頼する
 - AIタスク環境をセットアップする
   - AIタスクチケットへラベル`status: 進行中`を付与する
