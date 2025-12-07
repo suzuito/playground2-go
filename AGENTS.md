@@ -94,7 +94,7 @@ sequenceDiagram
 
   rect rgb(eee, eee, eee)
     Note over developer,agent: 設計タスク
-    developer->>agent: 要求チケットを依頼する
+    developer->>agent: 設計フェーズを進めるAIタスクチケットの作成を依頼する
     agent->>agent: 要求を把握する
     agent->>agent: 空のAIタスクチケットを作成する
     loop AIタスクチケットを更新し完成させる
@@ -118,7 +118,7 @@ sequenceDiagram
 
   rect rgb(eee, eee, eee)
     Note over developer,agent: 実装タスク
-    developer->>agent: 実装を依頼する
+    developer->>agent: 実装フェーズを進めるAIタスクチケットの作成を依頼する
     agent->>agent: 要求と設計を把握する
     agent->>agent: 空のAIタスクチケットを作成する
     loop AIタスクチケットを更新し完成させる
@@ -148,16 +148,16 @@ sequenceDiagram
 
 - 要求チケットを作成する
   - clientは`type: 要求`ラベルを付与したissueを作成する。これを要求チケットと呼ぶ
-- 要求チケットを依頼する
+- 設計フェーズを進めるAIタスクチケットの作成を依頼する
   - developerは次のメッセージをAIエージェントへ送る
   - ```
-    次の要求チケットの設計フェーズを進めて下さい
+    次の要求チケットの設計フェーズを進めるAIタスクチケットを作成して下さい
     <要求チケットのURL>
     ```
-- 実装を依頼する
+- 実装フェーズを進めるAIタスクチケットの作成を依頼する
   - developerは次のメッセージをAIエージェントへ送る
   - ```
-    次の要求チケットと設計に基づいて実装フェーズを進めて下さい
+    次の要求チケットの実装フェーズを進めるAIタスクチケットを作成して下さい
     <要求チケットのURL>
     <設計を実施したissueのURL>
     ```
