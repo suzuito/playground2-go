@@ -87,10 +87,12 @@ sequenceDiagram
   client->>client: 要求チケットを作成する
   client->>developer: 要求チケットを依頼する
   developer->>developer: 要求を把握する
-  developer->>developer: 空のAIタスクチケットを作成する
+  developer->>agent: 要求チケットを依頼する
+  agent->>agent: 要求を把握する
+  agent->>agent: 空のAIタスクチケットを作成する
   loop AIタスクチケットを更新し完成させる
-    developer->>agent: 相談
     agent->>developer: 相談
+    developer->>agent: 相談
   end
 
   developer->>agent: AIタスクチケットを依頼する
@@ -132,7 +134,10 @@ sequenceDiagram
       - ゴールの決定経緯を書いてください
   - タスクをサブタスクへ分解する
     - サブタスクの粒度は「1人が実行して2時間で完了する」です
+- AIタスクチケットを依頼する
+  - AIタスクチケットを進めることを依頼する
 - AIタスク環境をセットアップする
+  - AIタスクチケットへラベル`status: 進行中`を付与する
   - mainブランチをbaseブランチとし、新しいブランチを作成する。このブランチをfeatureブランチと呼ぶ
   - ブランチ名の命名規則は以下の通り
     - `iss-<issue番号>`
