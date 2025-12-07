@@ -38,6 +38,10 @@
 
 本タスクの成果物は以下となります。
 
+- プロダクト概要ドキュメント
+  - 形式
+    - Markdownで作成し、ビジョン/ターゲット/主要ユースケース/非機能要件などを`overview.md`として整理してください
+    - 原則 `issues/<要求チケット番号7桁ゼロ埋め>/overview.md` に保存してください
 - APIの仕様書
   - 形式
     - HTTP APIを設計する際は、[Open API v3.1.1 YAML形式](https://raw.githubusercontent.com/OAI/OpenAPI-Specification/refs/tags/3.1.1/versions/3.1.1.md)で書いてください
