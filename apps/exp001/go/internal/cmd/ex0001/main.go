@@ -14,46 +14,68 @@ import (
 )
 
 func main() {
-	isGracefulShutdownProcStarted := atomic.Bool{}
-	handler := newHandler(&isGracefulShutdownProcStarted)
-	server := http.Server{
-		Addr:    ":8080",
-		Handler: handler,
-	}
+	catchedShutdownSignal := atomic.Bool{}
+	handler := newHandler(&catchedShutdownSignal)
 
 	os.Exit(runHandlerWithGracefulShutdown(
 		context.Background(),
+		handler,
+		8080,
 		options{
-			GracefulShutdownProcTimeoutSeconds:              10,
-			ForcefullyHttpRequestCancellationTimeoutSeconds: 3,
-			IsGracefulShutdownProcStarted:                   &isGracefulShutdownProcStarted,
+			GracefulShutdownTimeoutSeconds:              10,
+			ForcefullyRequestCancellationTimeoutSeconds: 3,
 		},
-		&server,
-	))
+		&catchedShutdownSignal,
+	).Int())
 }
 
+type exitCode int
+
+func (t exitCode) Int() int {
+	return int(t)
+}
+
+const (
+	shutodownGracefully exitCode = 0
+	shutodownForcefully exitCode = 1
+)
+
 type options struct {
-	// シグナル受信後、処理中であるHTTPリクエストが終了するまで待つ時間(秒)
-	GracefulShutdownProcTimeoutSeconds int
+	// シグナル受信後、http.Server.Shutdown メソッドが呼ばれるまでスリープする時間(秒) <- 待ち時間a
+	WaitSecondsUntilGracefulShutdownIsStarted int
 
-	// 強制的なHTTPリクエストキャンセルが終了するまで待つ時間(秒)
-	ForcefullyHttpRequestCancellationTimeoutSeconds int
+	// http.Server.Shutdown メソッドが呼ばれた後、全てのTCPコネクションをアイドル状態にする処理のタイムアウト時間(秒) <- 待ち時間b
+	GracefulShutdownTimeoutSeconds int
 
-	// グレースフルシャットダウンが開始されたら true となる
-	IsGracefulShutdownProcStarted *atomic.Bool
+	// HTTPリクエストのキャンセル発動後、サーバーが強制終了するまでスリープする時間(秒)
+	// http.Server.Shutdown メソッドが呼ばれた後、GracefulShutdownTimeoutSeconds 秒だけ待ったにも関わらず
+	// 全てのTCPコネクションをアイドル状態にできなかった場合、HTTPリクエストコンテキストのキャンセルが発動される。
+	// HTTPハンドラーはHTTPリクエストコンテキストのキャンセルを受信した場合、
+	// ForcefullyRequestCancellationTimeoutSeconds 秒以内に
+	// リソースを解放し、処理を終了させ、レスポンスを返し、コネクションをアイドル状態にしなければならない。
+	ForcefullyRequestCancellationTimeoutSeconds int
 }
 
 // グレースフルシャットダウン付HTTPサーバーのサンプル実装
 func runHandlerWithGracefulShutdown(
 	ctx context.Context,
+	handler http.Handler,
+	serverPort int,
 	opts options,
-	server *http.Server,
-) int {
-
+	isSignalCatched *atomic.Bool,
+) exitCode {
+	// HTTPリクエストコンテキストのキャンセルを発動させるために
+	// BaseContextを設定したサーバーを作成する
+	// 本サンプルでは、GracefulShutdownTimeoutSeconds 秒待ってもTCPコネクションがアイドル状態にならない場合
+	// cancelCtxBaseRequest() を実行し、HTTPリクエストコンテキストのキャンセルを発動させる
 	ctxBaseRequest, cancelCtxBaseRequest := context.WithCancel(context.Background())
 	defer cancelCtxBaseRequest()
-	server.BaseContext = func(l net.Listener) context.Context {
-		return ctxBaseRequest
+	server := http.Server{
+		Addr:    fmt.Sprintf(":%d", serverPort),
+		Handler: handler,
+		BaseContext: func(l net.Listener) context.Context {
+			return ctxBaseRequest
+		},
 	}
 
 	// シグナルハンドラーの登録
@@ -76,27 +98,29 @@ func runHandlerWithGracefulShutdown(
 	defer stop()
 
 	// サーバーの起動
-	chTCPListenIsDone := make(chan error)
+	chServeIsDone := make(chan error)
 	go func() {
 		fmt.Println("server started")
 
 		// リスン状態を開始する
-		// 意図的なリスン状態の終了(Server.Shutdown または Server.Close が実行されたことによる終了)においては
+		// 意図的なリスン状態の終了(http.Server.Shutdown または http.Server.Close が実行されたことによる終了)においては
 		// ListenAndServeメソッドは ErrServerClosed エラーを返す
 		// そうでない場合においては、そのエラー内容を返す
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fmt.Printf("server finished with error: %+v\n", err)
-			chTCPListenIsDone <- err
+			chServeIsDone <- err
 		} else {
+			// ErrServerClosed だった場合は異常終了ではない
+			// なぜならグレースフルシャットダウンによる終了(http.Server.Shutdownメソッドが実行された)なため
 			fmt.Println("server finished")
 		}
 
-		close(chTCPListenIsDone)
+		close(chServeIsDone)
 	}()
 
 	// サーバーの終了、または、シグナルの受信、を待つ
 	select {
-	case err := <-chTCPListenIsDone:
+	case err := <-chServeIsDone:
 		// サーバーの終了
 
 		if err != nil {
@@ -114,42 +138,47 @@ func runHandlerWithGracefulShutdown(
 		return 0
 	case <-ctxSignal.Done():
 		// シグナルを受信
-
-		// シグナルハンドラーを解除するために stop 関数を実行する
-		stop()
-
-		if opts.IsGracefulShutdownProcStarted != nil {
-			opts.IsGracefulShutdownProcStarted.Store(true)
-		}
 	}
-
 	// シグナル受信後の処理をここから下に書く
 
+	// シグナルハンドラーを解除するために stop 関数を実行する
+	stop()
+
 	fmt.Printf("catch signal: %+v\n", context.Cause(ctxSignal))
-
-	// シグナル受信後の待ち時間設定
-	// シグナルを受信してからサーバーを Graceful shutdown するまでの待ち時間
-	// この待ち時間をどの程度の幅にするか？は、いろいろ考えらえる
-	ctxTimeout, cancel := context.WithTimeout(
-		context.Background(),
-		time.Duration(opts.GracefulShutdownProcTimeoutSeconds)*time.Second,
-	)
-	defer cancel()
-
-	// グレースフルシャットダウンの実行
-	// contextのキャンセルが発生した場合(例えば、シグナル受信後の待ち時間以内にグレースフルシャットダウンできなかった、など)
-	// Shutdownメソッドはエラーを返す
-	err := server.Shutdown(ctxTimeout)
-	if err != nil {
-		cancelCtxBaseRequest()
-		fmt.Printf("failed to graceful shutdown: %+v\n", err)
-		fmt.Println("waiting to cancel http request is started")
-		time.Sleep(time.Duration(opts.ForcefullyHttpRequestCancellationTimeoutSeconds) * time.Second)
-		fmt.Println("waiting to cancel http request is finished")
-		fmt.Println("exit server forcefully")
-		return 2
+	if isSignalCatched != nil {
+		isSignalCatched.Store(true)
 	}
 
-	fmt.Println("graceful shutdown is ok")
-	return 0
+	fmt.Printf("http.Server.Shutdown メソッドが呼ばれるまで %d 秒間スリープする\n", opts.WaitSecondsUntilGracefulShutdownIsStarted)
+	time.Sleep(time.Duration(opts.WaitSecondsUntilGracefulShutdownIsStarted) * time.Second)
+
+	// グレースフルシャットダウンの実行が開始される
+	fmt.Println("全てのTCPコネクションをアイドル状態にする処理(http.Server.Shutdownメソッドを呼ぶだけですが)を開始します")
+	fmt.Printf("%d 秒間待ちます\n", opts.GracefulShutdownTimeoutSeconds)
+	ctxTimeout, cancel := context.WithTimeout(
+		context.Background(),
+		time.Duration(opts.GracefulShutdownTimeoutSeconds)*time.Second,
+	)
+	defer cancel()
+	err := server.Shutdown(ctxTimeout)
+	if err != nil {
+		// Shutdownメソッドがエラーを返した場合
+		// GracefulShutdownTimeoutSeconds (秒)時間以内に全てのTCPコネクションをアイドル状態にできなかったことを意味する
+		// アイドル状態に戻せなかったコネクションが残っているがもうこれ以上は待てないので、
+		// cancelCtxBaseRequest を呼び、コンテキストを介してハンドラー側へキャンセル信号を伝播する
+		// ハンドラー側はキャンセル信号を受信したら即座にリソースを解放し、処理を終了させ、レスポンスを返し、コネクションをアイドル状態にする
+		cancelCtxBaseRequest()
+		fmt.Printf("全てのTCPコネクションをアイドル状態にできませんでした: %+v\n", err)
+		fmt.Println("ハンドラー側へキャンセル信号を送ります")
+		fmt.Printf("%d 秒後にサーバーを強制終了させますので、ハンドラーは時間内に処理を終えて下さい\n", opts.ForcefullyRequestCancellationTimeoutSeconds)
+		time.Sleep(time.Duration(opts.ForcefullyRequestCancellationTimeoutSeconds) * time.Second)
+		fmt.Println("exit server forcefully")
+		// 実はこれを呼ぶ必要があるらしい...
+		// server.Close を呼ばない場合、TCPコネクションは生き続ける（サーバーは終了していない）
+		server.Close()
+		return shutodownForcefully
+	}
+
+	fmt.Println("exit server gracefully")
+	return shutodownGracefully
 }
