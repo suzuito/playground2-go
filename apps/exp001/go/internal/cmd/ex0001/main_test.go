@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var dummySigTerm = errors.New("DUMMY_SIG_TERM")
+var errDummySigTerm = errors.New("DUMMY_SIG_TERM")
 var dummyServerPort = 8080
 
 func waitUntilServerUp() {
@@ -161,7 +161,7 @@ func Test(t *testing.T) {
 
 			// シャットダウンシグナル受信（の模倣）
 			beforeRecieveShutdownSignal := time.Now()
-			cancelMockCtx(dummySigTerm)
+			cancelMockCtx(errDummySigTerm)
 			// シグナル受信後、catchedShutdownSignal が即座に true となるか
 			for !catchedShutdownSignal.Load() {
 				time.Sleep(time.Duration(100) * time.Millisecond)

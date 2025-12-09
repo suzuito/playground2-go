@@ -175,7 +175,8 @@ func runHandlerWithGracefulShutdown(
 		fmt.Println("exit server forcefully")
 		// 実はこれを呼ぶ必要があるらしい...
 		// server.Close を呼ばない場合、TCPコネクションは生き続ける（サーバーは終了していない）
-		server.Close()
+		err := server.Close()
+		fmt.Printf("server is closed forcefully: %+v", err)
 		return shutodownForcefully
 	}
 
