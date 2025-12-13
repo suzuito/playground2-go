@@ -96,7 +96,7 @@ sequenceDiagram
   client->>developer: 要求チケットを依頼する
   developer->>developer: 要求を把握する
 
-  rect rgb(eee, eee, eee)
+  rect rgb(200,200,200,0.1)
     Note over developer,agent: 設計タスク
     developer->>agent: 設計フェーズを進めるAIタスクチケットの作成を依頼する
     agent->>agent: 要求を把握する
@@ -120,7 +120,7 @@ sequenceDiagram
     developer->>developer: AIタスクチケットのレビュー
   end
 
-  rect rgb(eee, eee, eee)
+  rect rgb(200,200,200,0.1)
     Note over developer,agent: 実装タスク
     developer->>agent: 実装フェーズを進めるAIタスクチケットの作成を依頼する
     agent->>agent: 要求と設計を把握する
